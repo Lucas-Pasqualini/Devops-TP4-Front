@@ -1,0 +1,45 @@
+version: 2.1
+workflows:
+  version: 2
+  devopsTP1:
+    jobs:
+      - build
+      - docker-build-and-push:
+          requires:
+          - build
+
+jobs:
+  build:
+    docker: &config
+      - image: cimg/node:12.18.4
+        auth:
+          username: mydockerhub-user
+          password: $DOCKERHUB_PASSWORD
+    steps:
+      - checkout
+      - restore_cache:
+          keys:
+            - npm-v1-dependencies-{{ checksum "yarn.lock" }}
+      - run: yarn install
+      - save_cache:
+          key: npm-v1-dependencies-{{ checksum "yarn.lock" }}
+          paths:
+            - ./node_modules
+  docker-build-and-push:
+    docker:
+      - image: docker:17.05.0-ce-git
+    steps:
+      - checkout
+      - setup_remote_docker
+      - run:
+          name: Build application Docker image
+          command: |
+            docker build --cache-from=app -t app .
+      - deploy:
+          name: Publish application to docker hub
+          command: |
+            docker login -e $DOCKER_HUB_EMAIL -u $DOCKER_HUB_USER_ID -p $DOCKER_HUB_PWD
+            docker tag app $DOCKER_HUB_USER_ID/devops-front-final:$CIRCLE_BUILD_NUM
+            docker tag app $DOCKER_HUB_USER_ID/devops-front-final:latest
+            docker push $DOCKER_HUB_USER_ID/devops-front-final:$CIRCLE_BUILD_NUM
+            docker push $DOCKER_HUB_USER_ID/devops-front-final:latest
